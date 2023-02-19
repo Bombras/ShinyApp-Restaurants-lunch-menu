@@ -12,53 +12,35 @@ adresa <- "https://www.modrydvere.cz/poledni-menu"
 
 modry_dvere <- read_html(adresa)
 
-modry_dvere_tabulka_A <- xml_find_all(modry_dvere, "//td[@class='bg_cervena2']//table")
+modry_dvere_tabulka_A <- xml_find_all(modry_dvere, "//li[@class='menu-item']")
 
-modry_dvere_tabulka_pondeli <- html_table(modry_dvere_tabulka_A[2], header = TRUE, fill = TRUE) %>% 
-  do.call(rbind.data.frame, .) %>%
-  as_tibble(.,.name_repair  = ~c("Množství", "Pokrm", "Cena", "Den")) %>%
-  mutate_all(na_if,"") %>%
-  drop_na(Množství) %>%
-  mutate(Den = 1) %>%
-  mutate_all(as.character)
-modry_dvere_tabulka_utery <- html_table(modry_dvere_tabulka_A[3], header = TRUE, fill = TRUE) %>% 
-  do.call(rbind.data.frame, .) %>%
-  as_tibble(.,.name_repair  = ~c("Množství", "Pokrm", "Cena", "Den")) %>%
-  mutate_all(na_if,"") %>%
-  drop_na(Množství)%>%
-  mutate(Den = 2)%>%
-  mutate_all(as.character)
-modry_dvere_tabulka_streda <- html_table(modry_dvere_tabulka_A[4], header = TRUE, fill = TRUE) %>%
-  do.call(rbind.data.frame, .) %>%
-  as_tibble(.,.name_repair  = ~c("Množství", "Pokrm", "Cena", "Den")) %>%
-  mutate_all(na_if,"") %>%
-  drop_na(Množství)%>%
-  mutate(Den = 3)%>%
-  mutate_all(as.character)
-modry_dvere_tabulka_ctvrtek <- html_table(modry_dvere_tabulka_A[5], header = TRUE, fill = TRUE) %>%
-  do.call(rbind.data.frame, .) %>%
-  as_tibble(.,.name_repair  = ~c("Množství", "Pokrm", "Cena", "Den")) %>%
-  mutate_all(na_if,"") %>%
-  drop_na(Množství) %>%
-  mutate(Den = 4)%>%
-  mutate_all(as.character)
-modry_dvere_tabulka_patek <- html_table(modry_dvere_tabulka_A[6], header = TRUE, fill = TRUE) %>%
-  do.call(rbind.data.frame, .) %>%
-  as_tibble(.,.name_repair  = ~c("Množství", "Pokrm", "Cena", "Den")) %>%
-  mutate_all(na_if,"") %>%
-  drop_na(Množství)%>%
-  mutate(Den = 5)%>%
-  mutate_all(as.character)
+modry_dvere <- tibble("Množství" = as.character(),
+                      "Pokrm" = as.character(),
+                      "Cena" = as.character()
+                      )
 
-Modry_dvere_dohromady <- bind_rows(modry_dvere_tabulka_pondeli
-                                   ,modry_dvere_tabulka_utery
-                                   ,modry_dvere_tabulka_streda
-                                   ,modry_dvere_tabulka_ctvrtek
-                                   ,modry_dvere_tabulka_patek) %>%
-  mutate(Cena = gsub("[^0-9]", "", Cena)
-         ,Cena = paste0(Cena, " Kč")) # %>%
-  # filter(Den == wday(as.Date(Sys.Date()), week_start = 1)) %>%
-  # mutate(Den = NULL)
+for (node in modry_dvere_tabulka_A) {
+  quantity <- node%>%
+    xml_child(1) %>%
+    xml_text()
+  food <- node%>%
+    xml_child(2) %>%
+    xml_text()
+  price <- node%>%
+    xml_child(3) %>%
+    xml_text()
+  
+  node_items <- tibble("Množství" = quantity,
+                        "Pokrm" = food,
+                        "Cena" = price)
+  modry_dvere <- bind_rows(modry_dvere, node_items)
+}
+
+Modry_dvere_dohromady <- modry_dvere %>%
+  mutate(isSoup = if_else(grepl("[l]", Množství), 1, 0),
+         Den = cumsum(isSoup)) %>%
+  select(-isSoup)
+
 
 # Snyt -------------------------------------------------------------
 
@@ -138,7 +120,7 @@ ui <- fluidPage(
                    ,radioButtons("radio", h3("Výběr dne v týdnu"),
                                  choices = list("Pondělí" = 1, "Úterý" = 2,
                                                 "Středa" = 3, "Čtvrtek" = 4,
-                                                "Pátek" = 5), selected = wday(as.Date(Sys.Date()), week_start = 1))
+                                                "Pátek" = 5), selected = min(wday(as.Date(Sys.Date()), week_start = 1),5))
       ),
       # Show a plot of the generated distribution
       mainPanel(
